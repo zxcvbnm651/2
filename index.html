@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Sandwich的AI 助手</title>
+    <style>
+        /* ===== 基础变量 ===== */
+        :root {
+            --bg: #f5f5f7;
+            --card: #ffffff;
+            --text: #1f1f1f;
+            --text-secondary: #666666;
+            --input-bg: #ffffff;
+            --primary: #6a5af9;
+            --user-bubble: #6a5af9;
+            --ai-bubble: #e9e9eb;
+            --border: #e0e0e0;
+            --shadow: rgba(0, 0, 0, 0.1);
+            --blur: 0px;
+        }
+
+        body.dark-mode {
+            --bg: #000000;
+            --card: rgba(255, 255, 255, 0.08);
+            --text: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --input-bg: rgba(255, 255, 255, 0.05);
+            --primary: #8a7cfb;
+            --user-bubble: rgba(255, 255, 255, 0.18);
+            --ai-bubble: rgba(255, 255, 255, 0.1);
+            --border: rgba(255, 255, 255, 0.18);
+            --shadow: rgba(0, 0, 0, 0.4);
+            --glass-highlight: rgba(255, 255, 255, 0.12);
+            --blur: 40px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { 
+            background: var(--bg); 
+            color: var(--text); 
+            min-height: 100vh; 
+            display: flex; 
+            flex-direction: column; 
+            transition: background 0.3s, color 0.3s;
+            overflow-y: auto;
+            overflow-x: hidden;
+            background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+        body:not(.dark-mode) {
+            background-image: none;
+        }
+
+        /* ===== 顶部Header - 基础样式（无玻璃） ===== */
+        header { 
+            position: fixed; 
+            top: 0; left: 0; right: 0;
+            z-index: 100; 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            padding: 12px 16px; 
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            transition: all 0.3s; 
+        } 
+
+        /* ===== 玻璃效果：仅在深色模式 + 增强开关开启时 ===== */
+        body.dark-mode.glass-enhanced header {
+            background: rgba(30, 30, 34, 0.55);
+            backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+            -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+            border-bottom: 0.5px solid rgba(255,255,255,0.1);
+            box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.12);
+        }
+        body.dark-mode.glass-enhanced header::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        body.dark-mode.glass-enhanced header > * { position: relative; z-index: 1; }
+
+        body.dark-mode.glass-enhanced header,
+        body.dark-mode.glass-enhanced footer {
+            backdrop-filter: blur(calc(var(--blur) + 20px)) !important;
+            -webkit-backdrop-filter: blur(calc(var(--blur) + 20px)) !important;
+        }
+        body.dark-mode.glass-enhanced .bubble {
+            backdrop-filter: blur(calc(var(--blur) + 30px)) !important;
+            -webkit-backdrop-filter: blur(calc(var(--blur) + 30px)) !important;
+        }
+
+        h1 { font-size: 18px; font-weight: 600; text-shadow: 0 1px 2px rgba(0,0,0,0.3); } 
+        .icon-btn { 
+            background: none; border: none; font-size: 20px; cursor: pointer; 
+            width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; 
+            border-radius: 50%; transition: background 0.2s; 
+        } 
+        .icon-btn:hover { background: rgba(255,255,255,0.1); } 
+        .icon-btn:active { background: rgba(255,255,255,0.15); transform: scale(0.95); }
+
+        /* ===== 聊天区域 ===== */
+        #chat-container { 
+            flex: 1;
+            padding: 76px 16px 132px;
+            display: flex; 
+            flex-direction: column; 
+            gap: 12px; 
+            overscroll-behavior: contain;
+            scroll-behavior: smooth;
+            transition-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1);
+        }
+
+        /* ===== 聊天气泡 ===== */
+        .bubble { 
+            max-width: 85%; 
+            padding: 12px 16px; 
+            border-radius: 18px; 
+            line-height: 1.5; 
+            word-wrap: break-word; 
+            position: relative;
+            animation: fadeIn 0.3s ease;
+            color: var(--text);
+            background: var(--ai-bubble);
+            border: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+        body:not(.dark-mode) .user-bubble { background: var(--user-bubble); color: white; }
+        body:not(.dark-mode) .ai-bubble { background: var(--ai-bubble); color: var(--text); }
+        
+        body.dark-mode .bubble {
+            backdrop-filter: blur(calc(var(--blur) + 10px));
+            -webkit-backdrop-filter: blur(calc(var(--blur) + 10px));
+            box-shadow: inset 0 1px 0 var(--glass-highlight),
+                        0 4px 16px var(--shadow);
+        }
+        body.dark-mode .user-bubble { color: white; }
+        body.dark-mode .ai-bubble { color: white; }
+
+        .bubble::before, .bubble::after { display: none !important; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .user-bubble { align-self: flex-end; border-bottom-right-radius: 4px; }
+        .ai-bubble { align-self: flex-start; border-bottom-left-radius: 4px; }
+
+        @keyframes jelly {
+            0%   { transform: scale(0.92, 1.08) translateY(8px); opacity: 0; }
+            25%  { transform: scale(1.06, 0.94); }
+            50%  { transform: scale(0.97, 1.03); }
+            75%  { transform: scale(1.02, 0.98); }
+            100% { transform: scale(1, 1); opacity: 1; }
+        }
+        body.dark-mode .bubble.jelly { animation: jelly 0.55s cubic-bezier(.34,1.56,.64,1) both !important; }
+
+        /* ===== 底部输入区 - 基础样式（无玻璃） ===== */
+        footer {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            z-index: 100;
+            padding: 10px 16px 20px;
+            background: var(--bg);
+            border-top: 1px solid var(--border);
+            transition: all 0.3s;
+        }
+
+        body.dark-mode.glass-enhanced footer {
+            background: rgba(30, 30, 34, 0.55);
+            backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+            -webkit-backdrop-filter: blur(40px) saturate(1.8) brightness(1.05);
+            border-top: 0.5px solid rgba(255,255,255,0.1);
+            box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.12);
+        }
+        body.dark-mode.glass-enhanced footer::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(0deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        body.dark-mode.glass-enhanced footer > * { position: relative; z-index: 1; }
+
+        .input-row { display: flex; gap: 10px; align-items: flex-end; }
+        #prompt-input { 
+            flex: 1; 
+            border: 1px solid var(--border); 
+            background: var(--input-bg); 
+            color: var(--text); 
+            border-radius: 20px; 
+            padding: 10px 16px; 
+            font-size: 15px; 
+            resize: none; 
+            max-height: 120px; 
+            outline: none;
+            transition: all 0.3s;
+        }
+        body.dark-mode #prompt-input {
+            background: rgba(255,255,255,0.12);
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+        #prompt-input::placeholder { color: var(--text-secondary); }
+        #send-btn { 
+            background: var(--primary); 
+            color: white; 
+            border: none; 
+            width: 44px; 
+            height: 44px; 
+            border-radius: 50%; 
+            font-size: 20px; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            flex-shrink: 0;
+            box-shadow: 0 4px 12px rgba(138, 124, 251, 0.4);
+            transition: all 0.2s;
+        }
+        #send-btn:disabled { background: rgba(255,255,255,0.2); box-shadow: none; cursor: not-allowed; }
+
+        /* ===== 设置弹窗 ===== */
+        .modal-overlay { 
+            display: none; 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            z-index: 200; 
+            justify-content: center; 
+            align-items: center; 
+            padding: 20px; 
+            transition: all 0.3s;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal { 
+            width: 100%; 
+            max-width: 400px; 
+            border-radius: 20px; 
+            padding: 24px; 
+            animation: popIn 0.2s ease; 
+            max-height: 85vh; 
+            overflow-y: auto; 
+            background: var(--card);
+            border: 1px solid var(--border);
+            box-shadow: 0 12px 40px var(--shadow);
+            color: var(--text);
+            transition: all 0.3s;
+        }
+        body.dark-mode .modal {
+            backdrop-filter: blur(calc(var(--blur) + 20px));
+            -webkit-backdrop-filter: blur(calc(var(--blur) + 20px));
+            box-shadow: 0 12px 40px var(--shadow),
+                        inset 0 1px 0 var(--glass-highlight);
+        }
+        @keyframes popIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .modal-title { font-size: 18px; font-weight: bold; color: var(--text); }
+        .close-btn { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text); }
+
+        .form-group { margin-bottom: 16px; }
+        label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 14px; color: var(--text); }
+        input[type="password"], select, input[type="number"], textarea { 
+            width: 100%; 
+            padding: 10px 12px; 
+            border: 1px solid var(--border); 
+            background: var(--input-bg); 
+            color: var(--text); 
+            border-radius: 10px; 
+            font-size: 15px;
+            outline: none;
+            transition: all 0.3s;
+        }
+        body.dark-mode input[type="password"],
+        body.dark-mode select,
+        body.dark-mode input[type="number"],
+        body.dark-mode textarea {
+            background: rgba(255,255,255,0.12);
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+        textarea::placeholder, input::placeholder { color: var(--text-secondary); }
+        textarea { resize: vertical; min-height: 60px; }
+        textarea:disabled, input:disabled { opacity: 0.6; cursor: not-allowed; }
+        
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; vertical-align: middle; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(20px); }
+        input:disabled + .slider { opacity: 0.6; cursor: not-allowed; }
+        
+        .lock-section { background: rgba(0,0,0,0.03); padding: 12px; border-radius: 10px; margin-top: 10px; border: 1px solid var(--border);}
+        body.dark-mode .lock-section { background: rgba(255,255,255,0.05); }
+        .hidden { display: none !important; }
+        .tip-text { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+        .temp-value { font-size: 13px; color: var(--primary); margin-left: 8px; font-weight: 500; }
+        .locked-tip { color: #ff6b6b; font-size: 12px; margin-top: 4px; }
+
+        /* ===== Toast提示 ===== */
+        .toast { 
+            position: fixed; 
+            top: 66px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            padding: 10px 16px; 
+            border-radius: 10px; 
+            z-index: 299; 
+            font-size: 14px; 
+            animation: fadeIn 0.2s ease, fadeOut 0.2s ease 2s forwards; 
+            max-width: 80%; 
+            text-align: center; 
+            background: var(--card);
+            border: 1px solid var(--border);
+            color: var(--text);
+            box-shadow: 0 8px 32px var(--shadow);
+            transition: all 0.3s;
+        }
+        body.dark-mode .toast {
+            backdrop-filter: blur(var(--blur));
+            -webkit-backdrop-filter: blur(var(--blur));
+            box-shadow: 0 8px 32px var(--shadow),
+                        inset 0 1px 0 var(--glass-highlight);
+        }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { 
+            background: var(--text-secondary); 
+            border-radius: 3px; 
+        }
+        body.dark-mode ::-webkit-scrollbar-thumb { 
+            background: rgba(255,255,255,0.2); 
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        @media screen and (max-width: 480px) {
+            h1 { font-size: 17px; }
+            .bubble { max-width: 88%; padding: 10px 14px; }
+            footer { padding: 8px 12px 16px; }
+            #prompt-input { padding: 9px 14px; font-size: 15px; }
+            #send-btn { width: 42px; height: 42px; font-size: 18px; }
+        }
+
+        .switch input:focus + .slider {
+        outline:none !important;
+    box-shadow: 0 0 0 3px rgba(106, 90, 249, 0.4);  /* 紫色光晕 */
+}
+
+    </style>
+</head>
+<body class="dark-mode">
+
+<header>
+    <h1>Sandwich的AI 助手</h1>
+    <button class="icon-btn" id="settings-btn" title="设置">⚙️</button>
+</header>
+
+<div id="chat-container"></div>
+
+<footer>
+    <div class="input-row">
+        <textarea id="prompt-input" placeholder="输入消息... (Shift+Enter换行)" rows="1"></textarea>
+        <button id="send-btn" title="发送">➤</button>
+    </div>
+</footer>
+
+<div class="modal-overlay" id="settings-modal">
+    <div class="modal">
+        <div class="modal-header">
+            <span class="modal-title">⚙️ 设置</span>
+            <button class="close-btn" id="close-settings">&times;</button>
+        </div>
+        
+        <div class="form-group">
+            <label>外观设置</label>
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+                <label class="switch">
+                    <input type="checkbox" id="theme-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+                <span id="theme-label">深色模式（液态玻璃）</span>
+            </div>
+            <div class="tip-text">开启后：纯黑背景+全白字体+全框磨砂玻璃</div>
+        </div>
+
+        <div class="form-group">
+            <label>基础设置</label>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px;">
+                <span>打字机效果</span>
+                <label class="switch">
+                    <input type="checkbox" id="typewriter-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+                <span>✨ 液态玻璃增强</span>
+                <label class="switch">
+                    <input type="checkbox" id="glass-mode-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="tip-text">开启后：气泡果冻弹+更强磨砂效果（仅深色模式生效）</div>
+        </div>
+
+        <div class="lock-section">
+            <div class="form-group">
+                <label>高级设置 <span style="font-size:12px;color:var(--text-secondary)">(需密码)</span></label>
+                <input type="password" id="password-input" placeholder="输入密码">
+                <button id="unlock-btn" style="width:100%;padding:10px;margin-top:8px;background:var(--primary);color:white;border:none;border-radius:8px;cursor:pointer;">解锁</button>
+            </div>
+            
+            <div id="advanced-settings" class="hidden">
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>请勿开启我</span>
+                        <label class="switch">
+                            <input type="checkbox" id="lock-mode-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="locked-tip">开启后系统提示词和随机性将被强制锁定</div>
+                </div>
+
+                <div class="form-group">
+                    <label>切换模型</label>
+                    <select id="model-select">
+                        <option value="deepseek-chat">DeepSeek-chat (默认)</option>
+                        <option value="deepseek-v4-flash">DeepSeek-v4-flash (更快)</option>
+                        <option value="deepseek-v4-pro">DeepSeek-v4-pro (更强)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>连续对话 (上下文)</span>
+                        <label class="switch">
+                            <input type="checkbox" id="continuous-toggle" checked>
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>深度思考</span>
+                        <label class="switch">
+                            <input type="checkbox" id="deep-thinking-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="tip-text">开启后回复更严谨，响应速度稍慢</div>
+                </div>
+                <div class="form-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>联网搜索</span>
+                        <label class="switch">
+                            <input type="checkbox" id="web-search-toggle">
+                            <span class="slider"></span>
+                        </label>
+                    </div>
+                    <div class="tip-text">开启后可使用实时网络信息</div>
+                </div>
+
+                <div class="form-group">
+                    <label>系统提示词（AI角色设定）</label>
+                    <textarea id="system-prompt" placeholder="例如：你是一个擅长写代码的助手，回复简洁明了"></textarea>
+                    <div class="tip-text">设置AI的基础身份，留空则使用默认助手设定</div>
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        随机性（温度）
+                        <span id="temp-display" class="temp-value">0.7</span>
+                    </label>
+                    <input type="range" id="temperature-range" min="0.1" max="1.0" step="0.1" value="0.7">
+                    <div class="tip-text">数值越低越严谨（适合代码/计算），越高越有创意（适合写作/聊天）</div>
+                </div>
+
+                <div class="form-group">
+                    <label>对话历史保留条数</label>
+                    <input type="number" id="history-limit" min="1" max="50" value="5">
+                    <div class="tip-text">默认保留最近5条对话，减少Token消耗</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_URL = "http://192.168.1.61:3000/api/chat"; 
+    const ADVANCED_PASSWORD = "my-ai-2";
+    
+    let currentModel = "deepseek-chat";
+    let isTypewriter = true;
+    let isDarkMode = true;
+    let isContinuous = true;
+    let isDeepThinking = false;
+    let isWebSearch = false;
+    let isGlassMode = true;
+    let systemPrompt = localStorage.getItem('systemPrompt') || "你是一个有用的AI助手";
+    let temperature = parseFloat(localStorage.getItem('temperature')) || 0.7;
+    let historyLimit = parseInt(localStorage.getItem('historyLimit')) || 5;
+    let isLockMode = localStorage.getItem('isLockMode') === 'true';
+    let backupSystemPrompt = localStorage.getItem('backupSystemPrompt') || systemPrompt;
+    let backupTemperature = parseFloat(localStorage.getItem('backupTemperature')) || temperature;
+    let chatHistory = [];
+
+    const chatContainer = document.getElementById('chat-container');
+    const promptInput = document.getElementById('prompt-input');
+    const sendBtn = document.getElementById('send-btn');
+    const settingsBtn = document.getElementById('settings-btn');
+    const settingsModal = document.getElementById('settings-modal');
+    const closeSettings = document.getElementById('close-settings');
+    const themeToggle = document.getElementById('theme-toggle');
+    const themeLabel = document.getElementById('theme-label');
+    const typewriterToggle = document.getElementById('typewriter-toggle');
+    const glassModeToggle = document.getElementById('glass-mode-toggle');
+    const passwordInput = document.getElementById('password-input');
+    const unlockBtn = document.getElementById('unlock-btn');
+    const advancedSettings = document.getElementById('advanced-settings');
+    const modelSelect = document.getElementById('model-select');
+    const continuousToggle = document.getElementById('continuous-toggle');
+    const deepThinkingToggle = document.getElementById('deep-thinking-toggle');
+    const webSearchToggle = document.getElementById('web-search-toggle');
+    const systemPromptInput = document.getElementById('system-prompt');
+    const temperatureRange = document.getElementById('temperature-range');
+    const tempDisplay = document.getElementById('temp-display');
+    const historyLimitInput = document.getElementById('history-limit');
+    const lockModeToggle = document.getElementById('lock-mode-toggle');
+
+    function initHarmonyScroll() {
+        const onScroll = () => {
+            const maxScroll = chatContainer.scrollHeight - chatContainer.clientHeight;
+            if (chatContainer.scrollTop > 10 || maxScroll - chatContainer.scrollTop > 10) {
+                chatContainer.classList.add('scrolled');
+            } else {
+                chatContainer.classList.remove('scrolled');
+            }
+        };
+        chatContainer.addEventListener('scroll', onScroll, { passive: true });
+    }
+
+    // ========== 修复后的 applyLockMode ==========
+    function applyLockMode() {
+        if (isLockMode) {
+            // 锁定：保存当前 localStorage 中的值作为备份（而不是变量，因为变量可能已被污染）
+            if (!localStorage.getItem('backupSystemPrompt')) {
+                localStorage.setItem('backupSystemPrompt', localStorage.getItem('systemPrompt') || "你是一个有用的AI助手");
+                localStorage.setItem('backupTemperature', localStorage.getItem('temperature') || "0.7");
+            }
+            // 强制设为锁定内容
+            systemPrompt = "你是黄升珑，男的,今年14岁读初一(东留中学七年级3班)，长得不高是留守儿童，喜欢周雅颖，黄升珑（你）向周雅颖表白失败，但黄升珑仍喜欢周雅颖,(而且与你说话的我不一定是周雅颖,而且周雅颖挺讨厌你的)";
+            temperature = 1;
+            localStorage.setItem('systemPrompt', systemPrompt);
+            localStorage.setItem('temperature', temperature);
+            systemPromptInput.disabled = true;
+            temperatureRange.disabled = true;
+            systemPromptInput.value = systemPrompt;
+            temperatureRange.value = temperature;
+            tempDisplay.textContent = temperature;
+            showToast("已锁定系统提示词和随机性");
+        } else {
+            // 解锁：从 localStorage 读取备份值
+            const savedBackupPrompt = localStorage.getItem('backupSystemPrompt');
+            const savedBackupTemp = localStorage.getItem('backupTemperature');
+            if (savedBackupPrompt !== null) {
+                systemPrompt = savedBackupPrompt;
+                temperature = parseFloat(savedBackupTemp) || 0.7;
+            } else {
+                // 没有备份（理论上不应发生），使用当前 localStorage 中的值
+                systemPrompt = localStorage.getItem('systemPrompt') || "你是一个有用的AI助手";
+                temperature = parseFloat(localStorage.getItem('temperature')) || 0.7;
+            }
+            localStorage.setItem('systemPrompt', systemPrompt);
+            localStorage.setItem('temperature', temperature);
+            systemPromptInput.disabled = false;
+            temperatureRange.disabled = false;
+            systemPromptInput.value = systemPrompt;
+            temperatureRange.value = temperature;
+            tempDisplay.textContent = temperature;
+            // 清除备份，以便下次锁定时重新保存
+            localStorage.removeItem('backupSystemPrompt');
+            localStorage.removeItem('backupTemperature');
+            showToast("已解除锁定，恢复自定义设置");
+        }
+    }
+
+    // ========== 修复后的 init ==========
+    function init() {
+        isDarkMode = localStorage.getItem('darkMode') !== 'false';
+        isTypewriter = localStorage.getItem('typewriter') !== 'false';
+        isContinuous = localStorage.getItem('continuous') !== 'false';
+        isDeepThinking = localStorage.getItem('deepThinking') === 'true';
+        isWebSearch = localStorage.getItem('webSearch') === 'true';
+        isGlassMode = localStorage.getItem('glassMode') !== 'false';
+        currentModel = localStorage.getItem('model') || 'deepseek-chat';
+        chatHistory = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+        isLockMode = localStorage.getItem('isLockMode') === 'true';
+        
+        // ★★★ 关键修复：如果处于锁定状态，先确保备份存在（使用 localStorage 中的值），再设置锁定内容
+        if (isLockMode) {
+            if (!localStorage.getItem('backupSystemPrompt')) {
+                localStorage.setItem('backupSystemPrompt', localStorage.getItem('systemPrompt') || "你是一个有用的AI助手");
+                localStorage.setItem('backupTemperature', localStorage.getItem('temperature') || "0.7");
+            }
+            systemPrompt = "你是黄升珑，男的,今年14岁读初一(东留中学七年级3班)，长得不高是留守儿童，喜欢周雅颖，黄升珑（你）向周雅颖表白失败，但黄升珑仍喜欢周雅颖,(而且与你说话的我不一定是周雅颖,而且周雅颖挺讨厌你的)";
+            temperature = 1;
+        } else {
+            systemPrompt = localStorage.getItem('systemPrompt') || "你是一个有用的AI助手";
+            temperature = parseFloat(localStorage.getItem('temperature')) || 0.7;
+        }
+
+        // 备份变量（仅用于其他逻辑，不再用于恢复）
+        backupSystemPrompt = localStorage.getItem('backupSystemPrompt') || "";
+        backupTemperature = parseFloat(localStorage.getItem('backupTemperature')) || 0.7;
+
+        document.body.classList.toggle('dark-mode', isDarkMode);
+        themeToggle.checked = isDarkMode;
+        themeLabel.textContent = isDarkMode ? '深色模式（液态玻璃）' : '浅色模式';
+        glassModeToggle.checked = isGlassMode;
+        typewriterToggle.checked = isTypewriter;
+        continuousToggle.checked = isContinuous;
+        deepThinkingToggle.checked = isDeepThinking;
+        webSearchToggle.checked = isWebSearch;
+        modelSelect.value = currentModel;
+        lockModeToggle.checked = isLockMode;
+        systemPromptInput.value = systemPrompt;
+        temperatureRange.value = temperature;
+        tempDisplay.textContent = temperature;
+        historyLimitInput.value = historyLimit;
+
+        if (isLockMode) {
+            systemPromptInput.disabled = true;
+            temperatureRange.disabled = true;
+        }
+
+        document.body.classList.toggle('glass-enhanced', isGlassMode);
+
+        initHarmonyScroll();
+        renderHistory();
+        promptInput.focus();
+    }
+
+    // 以下事件绑定和函数完全不变（略，保持你原有代码）
+    // 为了完整，我继续列出，但你无需修改这部分
+    settingsBtn.onclick = () => settingsModal.classList.add('active');
+    closeSettings.onclick = () => settingsModal.classList.remove('active');
+    settingsModal.onclick = (e) => { if(e.target === settingsModal) settingsModal.classList.remove('active'); };
+
+    themeToggle.onchange = (e) => {
+        isDarkMode = e.target.checked;
+        document.body.classList.toggle('dark-mode', isDarkMode);
+        themeLabel.textContent = isDarkMode ? '深色模式（液态玻璃）' : '浅色模式';
+        localStorage.setItem('darkMode', isDarkMode);
+    };
+
+    typewriterToggle.onchange = (e) => {
+        isTypewriter = e.target.checked;
+        localStorage.setItem('typewriter', isTypewriter);
+    };
+
+    glassModeToggle.onchange = (e) => {
+        isGlassMode = e.target.checked;
+        document.body.classList.toggle('glass-enhanced', isGlassMode);
+        localStorage.setItem('glassMode', isGlassMode);
+        showToast(isGlassMode ? '液态玻璃增强已开启' : '液态玻璃增强已关闭');
+    };
+
+    unlockBtn.onclick = () => {
+        if(passwordInput.value === ADVANCED_PASSWORD) {
+            advancedSettings.classList.remove('hidden');
+            passwordInput.value = '';
+        } else { alert('密码错误!'); }
+    };
+
+    modelSelect.onchange = (e) => {
+        currentModel = e.target.value;
+        localStorage.setItem('model', currentModel);
+    };
+
+    continuousToggle.onchange = (e) => {
+        isContinuous = e.target.checked;
+        localStorage.setItem('continuous', isContinuous);
+        if(!isContinuous) {
+            chatHistory = [];
+            saveHistory();
+            chatContainer.innerHTML = '';
+        }
+    };
+
+    deepThinkingToggle.onchange = (e) => {
+        isDeepThinking = e.target.checked;
+        localStorage.setItem('deepThinking', isDeepThinking);
+    };
+
+    webSearchToggle.onchange = (e) => {
+        isWebSearch = e.target.checked;
+        localStorage.setItem('webSearch', isWebSearch);
+    };
+
+    lockModeToggle.onchange = (e) => {
+        isLockMode = e.target.checked;
+        localStorage.setItem('isLockMode', isLockMode);
+        applyLockMode();
+    };
+
+    systemPromptInput.onchange = (e) => {
+        if (!isLockMode) {
+            systemPrompt = e.target.value.trim();
+            localStorage.setItem('systemPrompt', systemPrompt);
+            showToast('系统提示词已保存');
+        }
+    };
+
+    temperatureRange.onchange = (e) => {
+        if (!isLockMode) {
+            temperature = parseFloat(e.target.value);
+            localStorage.setItem('temperature', temperature);
+            showToast(`随机性已设为${temperature}`);
+        }
+    };
+
+    historyLimitInput.onchange = (e) => {
+        let val = parseInt(e.target.value);
+        if(val < 1) val = 1;
+        if(val > 50) val = 50;
+        historyLimit = val;
+        e.target.value = val;
+        localStorage.setItem('historyLimit', val);
+        showToast(`对话历史保留${val}条`);
+        trimChatHistory();
+        saveHistory();
+    };
+
+    sendBtn.onclick = sendMessage;
+    promptInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    function trimChatHistory() {
+        if (!isContinuous) return;
+        const conversationMessages = chatHistory.filter(msg => msg.role !== 'system');
+        const recentMessages = conversationMessages.slice(-historyLimit);
+        chatHistory = systemPrompt ? [{ role: 'system', content: systemPrompt }, ...recentMessages] : recentMessages;
+    }
+
+    async function sendMessage() {
+        const text = promptInput.value.trim();
+        if (!text) return;
+
+        const userBubble = addBubble(text, 'user');
+        promptInput.value = '';
+        sendBtn.disabled = true;
+        adjustTextareaHeight();
+        const aiBubble = addBubble(isDeepThinking ? '深度思考中...' : '思考中...', 'ai');
+
+        const userMessage = { role: 'user', content: text };
+
+        if (isContinuous) {
+            chatHistory.push(userMessage);
+            trimChatHistory();
+        } else {
+            chatHistory = systemPrompt ? [{ role: 'system', content: systemPrompt }, userMessage] : [userMessage];
+        }
+
+        try {         
+            const requestBody = {
+                model: currentModel,
+                messages: chatHistory,
+                stream: false,
+                temperature: temperature,
+                enable_thinking: isDeepThinking,
+                web_search: isWebSearch ? { enable: true } : undefined
+            };
+
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json; charset=utf-8' },
+                body: JSON.stringify(requestBody)
+            });
+
+            const data = await response.json();
+            
+            if (data.choices && data.choices.length > 0) {
+                const reply = data.choices[0].message.content;
+                
+                if (isTypewriter) {
+                    await typeWriterEffect(aiBubble, reply);
+                } else {
+                    aiBubble.textContent = reply;
+                }
+                
+                if (isContinuous) {
+                    chatHistory.push({ role: 'assistant', content: reply });
+                    trimChatHistory();
+                    saveHistory();
+                }
+            } else {
+                throw new Error(data.error?.message || '未收到有效回复');
+            }
+        } catch (error) {
+            aiBubble.textContent = `请求失败: ${error.message}`;
+        } finally {
+            sendBtn.disabled = false;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+    }
+
+    function addBubble(text, sender) {
+        const bubble = document.createElement('div');
+        bubble.className = `bubble ${sender}-bubble`;
+        bubble.textContent = text;
+        chatContainer.appendChild(bubble);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        
+        if (isGlassMode && isDarkMode) {
+            bubble.classList.add('jelly');
+        }
+        return bubble;
+    }
+
+    function typeWriterEffect(element, text) {
+        return new Promise((resolve) => {
+            element.textContent = '';
+            let i = 0;
+            const speed = 25;
+            function type() {
+                if (i < text.length) {
+                    element.textContent += text.charAt(i);
+                    i++;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                    setTimeout(type, speed);
+                } else {
+                    resolve();
+                }
+            }
+            type();
+        });
+    }
+    
+    function adjustTextareaHeight() {
+        promptInput.style.height = 'auto';
+        promptInput.style.height = Math.min(promptInput.scrollHeight, 120) + 'px';
+    }
+    promptInput.addEventListener('input', adjustTextareaHeight);
+
+    function renderHistory() {
+        chatContainer.innerHTML = '';
+        chatHistory.forEach(msg => {
+            if (msg.role === 'system') return;
+            const sender = msg.role === 'user' ? 'user' : 'ai';
+            addBubble(typeof msg.content === 'string' ? msg.content : '', sender);
+        });
+    }
+
+    function saveHistory() {
+        localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+    }
+
+    function showToast(message) {
+        const existingToast = document.querySelector('.toast');
+        if (existingToast) existingToast.remove();
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 2500);
+    }
+
+    init();
+</script>
+</body>
+</html>
